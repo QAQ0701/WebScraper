@@ -1,0 +1,5 @@
+LOCAL_JSON_PATH = "local_json/links.json"
+CREDENTIALS_PATH = "local_json/credentials.json"
+OUTPUT_DIR = "output"
+CLEANED_DIR = "output/cleaned"
+COOKIES_DIR = "cookies"
