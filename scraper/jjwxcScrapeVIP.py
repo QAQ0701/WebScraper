@@ -3,17 +3,12 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-
-from jjwxc_helper.PUAglyph_to_image import render_given_pua_glyphs
-from jjwxc_helper.glyphTOunicode import generate_map
 from helper.utils import delete_existing_file, write_append, clean_txt, read_json
 from helper.selTools import get_title
 from jjwxc_helper.jj_helper import (
-    load_pua_map,
-    extract_pua_chars,
-    decode_font,
     ensure_latest_font,
     is_content_loaded,
+    decode_VIP,
 )
 from jjwxc_helper.CONSTANTS_JJ import (
     FONT_PATH,
@@ -73,7 +68,7 @@ def loadCookies(driver):
 if __name__ == "__main__":
     # --- Initialize driver ---
     chrome_options = Options()
-    # chrome_options.add_argument("--headless=new")  # Optional headless
+    chrome_options.add_argument("--headless=new")  # Optional headless
     if VIP:
         chrome_options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
     driver = webdriver.Chrome(options=chrome_options)
@@ -116,24 +111,21 @@ if __name__ == "__main__":
             while retries < MAX_RETRIES:
                 try:
                     if VIP:
-                        # wait.until(
-                        #     EC.presence_of_element_located((By.CLASS_NAME, "novelbody"))
-                        # )
-                        # Wait up to 10 seconds for content
                         WebDriverWait(driver, 10, poll_frequency=0.5).until(
                             is_content_loaded
                         )
-                        text = driver.find_element(By.CLASS_NAME, "novelbody").text
-                        break  # Success
-                    else:
-                        text = driver.find_element(By.CLASS_NAME, "novelbody").text
-                        break
 
-                except Exception as TimeoutException:
+                    text = driver.find_element(By.CLASS_NAME, "novelbody").text.strip()
+                    if text:
+                        break  # content loaded successfully
+
+                except Exception as e:
                     retries += 1
-                    print(f"Content not loaded, refreshing page... attempt {retries}")
+                    print(
+                        f"Content not loaded, refreshing page... attempt {retries} ({e})"
+                    )
                     driver.refresh()
-                    time.sleep(2)  # Give the page a moment to start loading again
+                    time.sleep(2)
 
             if not text:
                 print("Failed to load content after multiple attempts")
@@ -143,22 +135,8 @@ if __name__ == "__main__":
 
             # Split the text at the matched string
             result = text.split(remove_after_match)[0]
-            if VIP:
-                # --- Decypher ---
-                if os.path.exists(FONT_PATH):
-                    puas = extract_pua_chars(result)
-                    # #PUA to Image
-                    render_given_pua_glyphs(puas, FONT_PATH, GLYPH_DIR, 64)
-                    # #Image to UNICODE MAP
-                    print("\n[Generating Map]")
-                    generate_map(MAP_PATH)
-                    time.sleep(0.5)
-                    # --- Decode Font ---
-                    PUA_MAPPING = load_pua_map(MAP_PATH)
-                    decoded_text = decode_font(result, PUA_MAPPING)
-                    write_append(f"{decoded_text}\n", OUTPUT_PATH)
-            else:
-                write_append(f"{result}\n", OUTPUT_PATH)
+            output_txt = decode_VIP(result) if VIP else result
+            write_append(output_txt + "\n", OUTPUT_PATH)
 
             # break  # debug
             # --- Go to next page ---

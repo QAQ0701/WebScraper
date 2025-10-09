@@ -1,13 +1,16 @@
 from selenium.webdriver.common.by import By
 
 from helper.utils import delete_existing_file
-from jjwxc_helper.CONSTANTS_JJ import FONT_PATH, NETLOG_PATH
+from jjwxc_helper.CONSTANTS_JJ import FONT_PATH, NETLOG_PATH, GLYPH_DIR, MAP_PATH
+from jjwxc_helper.PUAglyph_to_image import render_given_pua_glyphs
+from jjwxc_helper.glyphTOunicode import generate_map
 
 import requests
 import hashlib
 import os
 import json
 import re
+import time
 
 
 # ======================================
@@ -207,3 +210,22 @@ def is_content_loaded(driver):
         return "vip内容加载中..." not in element.text and element.text.strip() != ""
     except:
         return False
+
+def decode_VIP(txt):
+    if not os.path.exists(FONT_PATH):
+        return txt  # fallback to raw text
+        
+    try:
+        puas = extract_pua_chars(txt)
+        # PUA to Image
+        render_given_pua_glyphs(puas, FONT_PATH, GLYPH_DIR, 64)
+        # #Image to UNICODE MAP
+        print("\n[Generating Map]")
+        generate_map(MAP_PATH)
+        time.sleep(0.5)
+        # --- Decode Font ---
+        PUA_MAPPING = load_pua_map(MAP_PATH)
+        return decode_font(txt, PUA_MAPPING)
+    except Exception as e:
+        print(f"[Error decoding VIP text]: {e}")
+        return txt  # fallback to raw text
