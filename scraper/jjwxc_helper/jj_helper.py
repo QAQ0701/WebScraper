@@ -1,7 +1,13 @@
 from selenium.webdriver.common.by import By
 
 from helper.utils import delete_existing_file
-from jjwxc_helper.CONSTANTS_JJ import FONT_PATH, NETLOG_PATH, GLYPH_DIR, MAP_PATH
+from jjwxc_helper.CONSTANTS_JJ import (
+    FONT_PATH,
+    NETLOG_PATH,
+    GLYPH_DIR,
+    MAP_PATH,
+    LOG_PATH,
+)
 from jjwxc_helper.PUAglyph_to_image import render_given_pua_glyphs
 from jjwxc_helper.glyphTOunicode import generate_map
 
@@ -11,6 +17,14 @@ import os
 import json
 import re
 import time
+import logging
+
+
+# ======================================
+#            CONFIG
+# ======================================
+logger = logging.getLogger(__name__)  # child logger
+logger.info("This is a message from jj_helper.py")
 
 # ======================================
 #            VARIABLES
@@ -32,7 +46,6 @@ def get_font_url(driver):
         json.dump(logs, f, indent=2)
 
     woff2_urls = []
-    print(type(logs))
 
     for entry in logs:
         entry_json = json.loads(entry["message"])
@@ -50,12 +63,12 @@ def get_font_url(driver):
     woff2_urls = list(dict.fromkeys(woff2_urls))
 
     if not woff2_urls:
-        print("[Font] No .woff2 font found in network logs.")
+        logging.warning("[Font] No .woff2 font found in network logs.")
         return None
     if woff2_urls:
-        # print("Found .woff2 URLs:", woff2_urls)
+        # logging.info("Found .woff2 URLs:", woff2_urls)
         font_url = woff2_urls[-1]  # usually the last one is the current font
-        print("[Font] Found .woff2 via network:", font_url)
+        logging.info(f"[Font] Found .woff2 via network: {font_url}")
         return font_url
 
 
@@ -68,13 +81,13 @@ def download_font(font_url):
         r.raise_for_status()
         with open(FONT_PATH, "wb") as f:
             f.write(r.content)
-        print(f"[Font] Downloaded font → {FONT_PATH}")
+        logging.info(f"[Font] Downloaded font → {FONT_PATH}")
         return FONT_PATH
     except Exception as e:
-        print(f"[!] Failed to download font: {e}")
+        logging.error(f"[!] Failed to download font: {e}")
         # fallback if cached font exists
         if os.path.exists(FONT_PATH):
-            print("[Font] Using cached font.")
+            logging.info("[Font] Using cached font.")
             return FONT_PATH
         return None
 
@@ -107,21 +120,21 @@ def compare_hash(url):
             current_hash, font_data = hashlib.md5(r.content).hexdigest(), r.content
 
             if current_hash != last_font_hash:
-                print(f"Deleting pre-existing font file ...")
+                logging.info(f"Deleting pre-existing font file ...")
                 os.remove(FONT_PATH)
-                print(f"[Font] Font changed. Downloading new font → {FONT_PATH}")
+                logging.info(f"[Font] Font changed. Downloading new font → {FONT_PATH}")
                 os.makedirs(os.path.dirname(FONT_PATH), exist_ok=True)
                 with open(FONT_PATH, "wb") as f:
                     f.write(font_data)
                 global changed_font
-                print(f"changed_font: {changed_font}, setting to True")
+                logging.debug(f"changed_font: {changed_font}, setting to True")
                 changed_font = True
             else:
-                print(f"changed_font: {changed_font}, setting to False")
+                logging.debug(f"changed_font: {changed_font}, setting to False")
                 changed_font = False
-                print("[Font] Font unchanged — reusing cached version.")
+                logging.info("[Font] Font unchanged — reusing cached version.")
     except Exception as e:
-        print(f"[!] Font hash check failed for {url}: {e}")
+        logging.error(f"[!] Font hash check failed for {url}: {e}")
         return
 
 
@@ -142,9 +155,9 @@ def compare_hash(url):
 #             new_font_hash = hashlib.md5(font_data_new).hexdigest()
 
 #     if last_font_hash != new_font_hash:
-#         print(True)
+#         logging.info(True)
 #     else:
-#         print(False)
+#         logging.info(False)
 
 
 def extract_pua_chars(text: str):
@@ -160,13 +173,13 @@ def ensure_latest_font(driver):
     """
     font_url = get_font_url(driver)
     if font_url == None:
-        print("[Font] Skipping font check.")
+        logging.info("[Font] Skipping font check.")
         return
     if not font_url:
         if not os.path.exists(FONT_PATH):
             raise FileNotFoundError(f"No cached font and no font found on page.")
         else:
-            print("[Font] Using cached font.")
+            logging.info("[Font] Using cached font.")
     else:
         if not os.path.exists(FONT_PATH):
             # if no previously cached font exists, download
@@ -174,7 +187,7 @@ def ensure_latest_font(driver):
         else:  # compare new url with cached font
             compare_hash(font_url)
     pseudo_mapping = get_pseudo_mapping(driver)
-    print("Detected pseudo-content mapping:", pseudo_mapping)
+    logging.info(f"Detected pseudo-content mapping: {pseudo_mapping}")
     # Inject pseudo-content dynamically
     for selector, content in pseudo_mapping.items():
         script = f"""
@@ -183,6 +196,7 @@ def ensure_latest_font(driver):
         }});
         """
         driver.execute_script(script)
+
 
 def get_pseudo_mapping(driver):
     script = """
@@ -224,8 +238,9 @@ def get_pseudo_mapping(driver):
 def is_content_loaded(driver):
     try:
         element = driver.find_element(By.CLASS_NAME, "novelbody")
-        return "vip内容加载中..." not in element.text and element.text.strip() != ""
-    except:
+        txt = element.text
+        return "vip内容加载中..." not in txt and txt.strip() != ""
+    except Exception:
         return False
 
 
@@ -234,18 +249,18 @@ def decode_VIP(txt):
         return txt  # fallback to raw text
 
     try:
-        print(f"[Decoding VIP] Changed font?: {changed_font}")
+        logging.info(f"[Decoding VIP] Changed font?: {changed_font}")
         if changed_font:
             puas = extract_pua_chars(txt)
             # PUA to Image
             render_given_pua_glyphs(puas, FONT_PATH, GLYPH_DIR, 64)
             # #Image to UNICODE MAP
-            print("\n[Generating Map]")
+            logging.info("\n[Generating Map]")
             generate_map(MAP_PATH)
             time.sleep(0.5)
         # --- Decode Font ---
         PUA_MAPPING = load_pua_map(MAP_PATH)
         return decode_font(txt, PUA_MAPPING)
     except Exception as e:
-        print(f"[Error decoding VIP text]: {e}")
+        logging.error(f"[Error decoding VIP text]: {e}")
         return txt  # fallback to raw text

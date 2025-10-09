@@ -1,14 +1,22 @@
 from opencc import OpenCC
 
+from CONSTANTS import LOG_PATH
+
 import os
 import requests
 import chardet
 import json
+import logging
 
+# ======================================
+#            CONFIG
+# ======================================
+logger = logging.getLogger(__name__)  # child logger
+logger.info("This is a message from utils.py")
 
 def delete_existing_file(path):
     if os.path.exists(path):
-        print(f"Deleting pre-existing file {path}...........")
+        logging.info(f"Deleting pre-existing file {path}...........")
         os.remove(path)
 
 
@@ -32,7 +40,7 @@ def write_append(text, filename):
         with open(filename, "a", encoding="utf-8") as output_file:
             output_file.write(text)
     except Exception as e:
-        print(f"[!] Failed to write file: {e}")
+        logging.error(f"[!] Failed to write file: {e}")
 
 
 def write_overwrite(text, filename):
@@ -41,11 +49,11 @@ def write_overwrite(text, filename):
         with open(filename, "w", encoding="utf-8") as output_file:
             output_file.write(text)
     except Exception as e:
-        print(f"[!] Failed to write file: {e}")
+        logging.error(f"[!] Failed to write file: {e}")
 
 
 def clean_txt(raw_txt, cleaned_txt, MATCH_STRINGS):
-    print("\n[Cleaning Output]")
+    logging.info("\n[Cleaning Output]")
     # Step 1: Open and read the lines from the input file
     with open(raw_txt, "r") as file:
         lines = file.readlines()
@@ -61,7 +69,7 @@ def clean_txt(raw_txt, cleaned_txt, MATCH_STRINGS):
 
     check_sim_or_tra(cleaned_txt)
 
-    print(f"[Done] Cleaned text saved to: {cleaned_txt}")
+    logging.info(f"[Done] Cleaned text saved to: {cleaned_txt}")
 
 
 def detect_encoding(content):
@@ -81,7 +89,7 @@ def get_links(url, curr, total):
         end = ".html"
         for i in range(2, total + 1):
             list.append(root + "_" + str(i) + end)
-    print(list)
+    logging.info(list)
     return list
 
 
@@ -91,7 +99,7 @@ def read_txt(path):
             text = f.read()
             return text
     except Exception as e:
-        print(f"[Error] Failed to read file: {e}")
+        logging.error(f"[Error] Failed to read file: {e}")
         return None
 
 
@@ -124,23 +132,24 @@ def check_sim_or_tra(path, threshold=0.8):
     ratio_traditional = same_as_traditional / total
 
     if ratio_simplified > ratio_traditional and ratio_simplified > threshold:
-        print(
-            "text is simplified, do nothing\n",
-            f"ratio_simplified: {ratio_simplified}\n",
-            f"ratio_traditional: {ratio_traditional}\n",
+        logging.info(
+            f"text is simplified, do nothing\n"
+            f"ratio_simplified: {ratio_simplified}\n"
+            f"ratio_traditional: {ratio_traditional}\n"
         )
-        print("do nothing, already simplified")
+        logging.info("do nothing, already simplified")
     elif ratio_traditional > ratio_simplified and ratio_traditional > threshold:
-        print(
-            "text is traditional, converting ...\n",
-            f"ratio_simplified: {ratio_simplified}\n",
-            f"ratio_traditional: {ratio_traditional}\n",
+        logging.info(
+            f"text is traditional, converting ...\n"
+            f"ratio_simplified: {ratio_simplified}\n"
+            f"ratio_traditional: {ratio_traditional}\n"
         )
         simplified_text = cc_t2s.convert(text)
         write_overwrite(simplified_text, path)
-        print("converted to simplified")
+        logging.info("converted to simplified")
     else:
-        print("undetermined whether text is simplified or traditional")
+        logging.error("undetermined whether text is simplified or traditional")
+
 
 def read_json(path, key):
     try:
@@ -148,5 +157,5 @@ def read_json(path, key):
             dict = json.load(f)[key]
             return dict
     except Exception as e:
-        print(f"[Error] Failed to read file: {e}")
+        logging.error(f"[Error] Failed to read file: {e}")
         return None

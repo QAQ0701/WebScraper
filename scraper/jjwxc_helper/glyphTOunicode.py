@@ -1,19 +1,44 @@
 from paddleocr import PaddleOCR
 from PIL import Image, ImageOps, ImageFilter
 
+from .CONSTANTS_JJ import GLYPH_DIR, LOG_PATH, VIP
+
 import json
 import os
 import io
 import numpy as np
 import re
+import logging
 
-from .CONSTANTS_JJ import GLYPH_DIR
 
+# ======================================
+#            CONFIG
+# ======================================
+logger = logging.getLogger(__name__)  # child logger
+logger.info("This is a message from glyphTOunicode.py")
+
+# ======================================
+#            VARIABLES
+# ======================================
+OCR = (
+    PaddleOCR(
+        lang="ch",
+        det_model_dir=None,
+        use_angle_cls=False,
+    )
+    if VIP
+    else None
+)
+
+# ======================================
+#            CONSTANTS
+# ======================================
 # Paths
 PATH = GLYPH_DIR
 # PATH = "scraper/jjwxc_helper/debug/issue_glyphs"  # debug
 OUTPUT_JSON_DEFAULT = "scraper/jjwxc_helper/data"
 TEMP_PATH = "scraper/jjwxc_helper/data/modImg.png"
+
 # Load full character dict from config.json
 with open(
     "/Users/o_o/.paddlex/official_models/PP-OCRv5_server_rec/config.json",
@@ -30,7 +55,7 @@ with open(
 
 def delete_existing_file(path):
     if os.path.exists(path):
-        print(f"Deleting pre-existing file {path}...........")
+        logging.info(f"Deleting pre-existing file {path}...........")
         os.remove(path)
 
 
@@ -95,25 +120,25 @@ def thicken_image(input, iterations=2):
 
 
 def generate_map(output_path=OUTPUT_JSON_DEFAULT):
-    # Initialize PaddleOCR in recognition-only mode
-    ocr = PaddleOCR(
-        lang="ch",
-        det_model_dir=None,
-        use_angle_cls=False,
-    )
+    # # Initialize PaddleOCR in recognition-only mode
+    # ocr = PaddleOCR(
+    #     lang="ch",
+    #     det_model_dir=None,
+    #     use_angle_cls=False,
+    # )
     results = {}
     failed = []
     delete_existing_file(output_path)
     img_files = [f for f in os.listdir(PATH) if f.endswith(".png")]
 
-    print(f"Found {len(img_files)} images. Starting OCR...")
+    logging.info(f"Found {len(img_files)} images. Starting OCR...")
 
     for i, img_file in enumerate(img_files, 1):
         path = os.path.join(PATH, img_file)
-        print(f"[{i}/{len(img_files)}] Processing {img_file}...")
+        logging.info(f"[{i}/{len(img_files)}] Processing {img_file}...")
 
         # First attempt
-        ocr_result = ocr.predict(path)
+        ocr_result = OCR.predict(path)
 
         char = None
         score = 0.0
@@ -129,33 +154,39 @@ def generate_map(output_path=OUTPUT_JSON_DEFAULT):
 
         # Retry if OCR failed or confidence is below 0.9
         if score < 0.9:
-            print(
+            logging.debug(
                 f"  → Low confidence ({score:.4f}) or no detection, retrying with thickening..."
             )
             arr = thicken_image(path, iterations=3)
-            ocr_result_retry = ocr.predict(arr)
+            ocr_result_retry = OCR.predict(arr)
             if ocr_result_retry and ocr_result_retry[0].get("rec_texts"):
                 char = ocr_result_retry[0]["rec_texts"][0]
                 score = float(ocr_result_retry[0]["rec_scores"][0])
                 if char == "其":
-                    print(f"  → Found '其', setting score to 0.86...")
+                    logging.debug(f"  → Found '其', setting score to 0.86...")
                     score = 0.86
             if score < 0.85:
-                print(f"  → Still low confidence ({score:.4f}), trying preprocessing")
-                ocr_result_retry = ocr.predict(preprocess_image(arr))
+                logging.debug(
+                    f"  → Still low confidence ({score:.4f}), trying preprocessing"
+                )
+                ocr_result_retry = OCR.predict(preprocess_image(arr))
                 if ocr_result_retry and ocr_result_retry[0].get("rec_texts"):
                     char = ocr_result_retry[0]["rec_texts"][0]
                     score = float(ocr_result_retry[0]["rec_scores"][0])
                 if score < 0.8:
-                    print(f"  → Still low confidence ({score:.4f}), trying slimming")
-                    ocr_result_retry = ocr.predict(
+                    logging.debug(
+                        f"  → Still low confidence ({score:.4f}), trying slimming"
+                    )
+                    ocr_result_retry = OCR.predict(
                         preprocess_image(thicken_image(path, iterations=2))
                     )
                     if ocr_result_retry and ocr_result_retry[0].get("rec_texts"):
                         char = ocr_result_retry[0]["rec_texts"][0]
                         score = float(ocr_result_retry[0]["rec_scores"][0])
                     if score < 0.83:
-                        print(f"  → Failed to recognize ({score:.4f}), skipping...")
+                        logging.error(
+                            f"  → Failed to recognize ({score:.4f}), skipping..."
+                        )
                         failed.append(f"{char}{img_file}")
 
         codepoint = img_file[2:6]
@@ -171,6 +202,8 @@ def generate_map(output_path=OUTPUT_JSON_DEFAULT):
             char = "口"
         if char == "24":
             char = "好"
+        if char == "K":
+            char = "下"
         if score < 0.8:
             if char == "我":
                 char = "等"
@@ -178,8 +211,6 @@ def generate_map(output_path=OUTPUT_JSON_DEFAULT):
                 char = "而"
             if char == "2":
                 char = "气"
-            if char == "K":
-                char = "下"
             if char == "四":
                 char = "自"
             if char == "→":
@@ -202,18 +233,18 @@ def generate_map(output_path=OUTPUT_JSON_DEFAULT):
         os.rename(old_name, new_name)
 
         if char:
-            print(f"  → Recognized as: {char} (confidence: {score:.4f})")
+            logging.info(f"  → Recognized as: {char} (confidence: {score:.4f})")
         else:
-            print(f"  → Failed to recognize ({score:.4f})")
+            logging.warning(f"  → Failed to recognize ({score:.4f})")
 
-    print(f"\nFailed to recognize {len(failed)} images:")
+    logging.warning(f"\nFailed to recognize {len(failed)} images:")
     for f in failed:
-        print(f"  {f}")
+        logging.warning(f"  {f}")
     # Save results
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=4)
 
-    print("OCR done! Results saved to", output_path)
+    logging.info(f"OCR done! Results saved to: {output_path}")
 
 
 # generate_map("scraper/cookies/map.json") # debug

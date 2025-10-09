@@ -2,14 +2,25 @@ from fontTools.ttLib import TTFont
 from PIL import Image, ImageDraw, ImageFont
 
 from helper.utils import clear_directory
-from .CONSTANTS_JJ import GLYPH_DIR, FONT_PATH
+from .CONSTANTS_JJ import GLYPH_DIR, FONT_PATH, LOG_PATH
 
 import os
 import re
+import logging
 
+
+# ======================================
+#            CONSTANTS
+# ======================================
 WOFF2_PATH = FONT_PATH
 OUTPUT_DIR = GLYPH_DIR
 
+
+# ======================================
+#            CONFIG
+# ======================================
+logger = logging.getLogger(__name__)  # child logger
+logger.info("This is a message from PUAglyph_to_image.py")
 
 def extract_pua_chars(text: str):
     """Return a set of all PUA characters present in the given text."""
@@ -40,7 +51,7 @@ def render_pua_glyphs(font_path, output_dir="glyphs", size=64):
             filename = f"{output_dir}/U+{codepoint:04X}.png"
             img.save(filename)
             count += 1
-    print(f"Rendered {count} PUA glyphs to '{output_dir}'.")
+    logging.info(f"Rendered {count} PUA glyphs to '{output_dir}'.")
 
 
 def render_given_pua_glyphs(given, font_path, output_dir="glyphs", size=64):
@@ -73,10 +84,10 @@ def render_given_pua_glyphs(given, font_path, output_dir="glyphs", size=64):
     for ch in given:
         codepoint = ord(ch)
         if not (0xE000 <= codepoint <= 0xF8FF):
-            print(f"[Skip] {ch} (U+{codepoint:04X}) not in PUA range.")
+            logging.warning(f"[Skip] {ch} (U+{codepoint:04X}) not in PUA range.")
             continue
         if codepoint not in cmap:
-            print(f"[⚠️ Missing] Font does not contain glyph for U+{codepoint:04X}")
+            logging.error(f"[⚠️ Missing] Font does not contain glyph for U+{codepoint:04X}")
             continue
 
         img = Image.new("L", (size + 16, size + 16), 255)
@@ -95,9 +106,9 @@ def render_given_pua_glyphs(given, font_path, output_dir="glyphs", size=64):
 
         filename = f"{output_dir}/U+{codepoint:04X}.png"
         img.save(filename)
-        # print(f"[Saved] {filename}")
+        logging.debug(f"[Saved] {filename}")
         rendered_count += 1
-    print(
+    logging.info(
         f"\n✅ Rendered {rendered_count}/{len(given)} given PUA glyphs to '{output_dir}'."
     )
 

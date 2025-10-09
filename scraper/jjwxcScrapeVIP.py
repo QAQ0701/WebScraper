@@ -3,7 +3,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from helper.utils import delete_existing_file, write_append, clean_txt, read_json
+from helper.utils import delete_existing_file, write_append, clean_txt
 from helper.selTools import get_title
 from jjwxc_helper.jj_helper import (
     ensure_latest_font,
@@ -20,23 +20,23 @@ from jjwxc_helper.CONSTANTS_JJ import (
     DOMAIN,
     MAX_RETRIES,
     LOCAL_JSON_PATH,
+    VIP,
+    URL,
 )
-from CONSTANTS import CLEANED_DIR
+from CONSTANTS import CLEANED_DIR, LOG_PATH
+from logger_config import setup_logger
 
 import time
 import os
 import json
+import logging
 
 
 # ======================================
 #            GLOBAL CONFIG
 # ======================================
-json_value = read_json(LOCAL_JSON_PATH, "jjwxc")
-URL = json_value["url"]
-if json_value["VIP"] == "false":
-    VIP = False
-else:
-    VIP = True
+logger = setup_logger()
+logger.info("Starting jjwxcScrapeVIP...")
 
 
 # ======================================
@@ -55,11 +55,11 @@ def loadCookies(driver):
         if "domain" in cookie and "jjwxc.net" in cookie["domain"]:
             try:
                 driver.add_cookie(cookie)
-                # print(f"Added cookie {cookie.get('name')}")
+                # logging.info(f"Added cookie {cookie.get('name')}")
             except Exception as e:
-                print(f"Error adding cookie {cookie.get('name')}: {e}")
+                logging.info(f"Error adding cookie {cookie.get('name')}: {e}")
         else:
-            print(f"Invalid cookie: {cookie}")
+            logging.info(f"Invalid cookie: {cookie}")
 
 
 # ======================================
@@ -69,6 +69,10 @@ if __name__ == "__main__":
     # --- Initialize driver ---
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")  # debug
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
     if VIP:
         chrome_options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
     driver = webdriver.Chrome(options=chrome_options)
@@ -95,7 +99,7 @@ if __name__ == "__main__":
     try:
         while True:
             wait.until(EC.presence_of_element_located((By.CLASS_NAME, "novelbody")))
-            print(f"\n[Chapter {i}] Processing...")
+            logging.info(f"\n[Chapter {i}] Processing...")
             # --- Check and update font if changed ---
             if VIP:
                 ensure_latest_font(driver)
@@ -117,17 +121,21 @@ if __name__ == "__main__":
                     text = driver.find_element(By.CLASS_NAME, "novelbody").text.strip()
                     if text:
                         break  # content loaded successfully
+                    else:
+                        logging.error("Content not loaded, raising exception...")
+                        raise Exception
 
                 except Exception as e:
                     retries += 1
-                    print(
-                        f"Content not loaded, refreshing page... attempt {retries} ({e})"
+                    logging.info(
+                        f"Content not loaded, waiting for 5s ... attempt {retries} ({e})"
                     )
-                    driver.refresh()
-                    time.sleep(2)
+                    logging.info(f"text content: {text}")
+                    # driver.refresh()
+                    time.sleep(5)
 
             if not text:
-                print("Failed to load content after multiple attempts")
+                logging.error("Failed to load content after multiple attempts")
                 break
 
             remove_after_match = "作者有话说"
@@ -146,11 +154,11 @@ if __name__ == "__main__":
                 driver.execute_script("arguments[0].scrollIntoView();", next_page_link)
                 next_page_link.click()
                 time.sleep(0.8)
-            except Exception:
-                print("\n[End] No more chapters found.")
+            except Exception as e:
+                logging.info(f"\n[End] No more chapters found. {e}")
                 break
     except Exception as e:
-        print(f"[Error] Scraping ended with: {e}")
+        logging.warning(f"[Error] Scraping ended with: {e}")
     # --- Clean Output ---
-    clean_txt(OUTPUT_PATH, CLEANED_PATH, MATCH_STRINGS) #debug
+    clean_txt(OUTPUT_PATH, CLEANED_PATH, MATCH_STRINGS)  # debug
     cleanup()
