@@ -9,6 +9,7 @@ LOCAL_JSON_PATH = LOCAL_JSON_PATH
 COOKIES_PATH = f"{COOKIES_DIR}/jjwxc_cookies.json"
 OUTPUT_PATH = f"{OUTPUT_DIR}/jjwxcVIP.txt"
 LOG_PATH = LOG_PATH
+DEBUG_IMG_DIR = "scraper/jjwxc_helper/debug/issue_glyphs"
 MATCH_STRINGS = [
     "[收藏此章节] [免费得晋江币] [投诉]",
     "插入书签",

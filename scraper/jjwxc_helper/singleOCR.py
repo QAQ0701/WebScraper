@@ -2,7 +2,7 @@ from paddleocr import PaddleOCR
 from PIL import Image, ImageOps
 import numpy as np
 
-PATH = "scraper/jjwxc_glyphs24/U+E155_口_口_口.png"
+PATH = "scraper/jjwxc_helper/debug/issue_glyphs/U+E865_气_99.png"
 
 
 def preprocess_image(path):

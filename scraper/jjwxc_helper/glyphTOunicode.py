@@ -1,7 +1,7 @@
 from paddleocr import PaddleOCR
 from PIL import Image, ImageOps, ImageFilter
 
-from .CONSTANTS_JJ import GLYPH_DIR, LOG_PATH, VIP
+from .CONSTANTS_JJ import GLYPH_DIR, VIP, DEBUG_IMG_DIR
 
 import json
 import os
@@ -34,7 +34,6 @@ OCR = (
 #            CONSTANTS
 # ======================================
 # Paths
-PATH = GLYPH_DIR
 # PATH = "scraper/jjwxc_helper/debug/issue_glyphs"  # debug
 OUTPUT_JSON_DEFAULT = "scraper/jjwxc_helper/data"
 TEMP_PATH = "scraper/jjwxc_helper/data/modImg.png"
@@ -129,12 +128,12 @@ def generate_map(output_path=OUTPUT_JSON_DEFAULT):
     results = {}
     failed = []
     delete_existing_file(output_path)
-    img_files = [f for f in os.listdir(PATH) if f.endswith(".png")]
+    img_files = [f for f in os.listdir(GLYPH_DIR) if f.endswith(".png")]
 
     logging.info(f"Found {len(img_files)} images. Starting OCR...")
 
     for i, img_file in enumerate(img_files, 1):
-        path = os.path.join(PATH, img_file)
+        path = os.path.join(GLYPH_DIR, img_file)
         logging.info(f"[{i}/{len(img_files)}] Processing {img_file}...")
 
         # First attempt
@@ -189,6 +188,10 @@ def generate_map(output_path=OUTPUT_JSON_DEFAULT):
                         )
                         failed.append(f"{char}{img_file}")
 
+        # Split filename and extension
+        name, ext = os.path.splitext(img_file)
+        score_trunc = int(score * 100)
+        old_path = f"{GLYPH_DIR}/{img_file}"
         codepoint = img_file[2:6]
         if char == "X":
             char = "又"
@@ -204,6 +207,7 @@ def generate_map(output_path=OUTPUT_JSON_DEFAULT):
             char = "好"
         if char == "K":
             char = "下"
+
         if score < 0.8:
             if char == "我":
                 char = "等"
@@ -221,25 +225,29 @@ def generate_map(output_path=OUTPUT_JSON_DEFAULT):
                 char = "真"
             if char == "几":
                 char = "己"
-        results[chr(int(codepoint, 16))] = {"char": char, "confidence": score}
-
-        # Split filename and extension
-        name, ext = os.path.splitext(img_file)
+            new_dir = f"{DEBUG_IMG_DIR}/{name}_{char}_{score_trunc}{ext}"
+            # Make sure target directory exists
+            os.makedirs(DEBUG_IMG_DIR, exist_ok=True)
+            # Move/rename file
+            os.rename(old_path, new_dir)
+            logging.info(f"Moved {old_path} -> {new_dir}")
 
         # Add character at the end (e.g., "_A")
-        new_name = f"{PATH}/{name}_{char}{ext}"
-        old_name = f"{PATH}/{img_file}"
+        new_name = f"{GLYPH_DIR}/{name}_{char}_{score_trunc}{ext}"
         # Rename the file
-        os.rename(old_name, new_name)
+        os.rename(old_path, new_name)
 
         if char:
             logging.info(f"  → Recognized as: {char} (confidence: {score:.4f})")
         else:
-            logging.warning(f"  → Failed to recognize ({score:.4f})")
+            logging.warning(
+                f"  → Failed to recognize ({new_name}, confidence: {score:.4f})"
+            )
 
     logging.warning(f"\nFailed to recognize {len(failed)} images:")
     for f in failed:
         logging.warning(f"  {f}")
+        results[chr(int(codepoint, 16))] = {"char": char, "confidence": score}
     # Save results
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=4)
