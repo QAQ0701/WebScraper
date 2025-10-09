@@ -12,6 +12,11 @@ import json
 import re
 import time
 
+# ======================================
+#            VARIABLES
+# ======================================
+changed_font = True
+
 
 # ======================================
 #            HELPER FUNCTIONS
@@ -89,8 +94,7 @@ def decode_font(text: str, mapping: dict):
 
 
 def compare_hash(url):
-    """Return True/False if the MD5 hash of the font file contents (and its binary) match."""
-    """True if the font has changed, False otherwise."""
+    """Check if the MD5 hash of the font file contents (and its binary) match."""
     last_font_hash = None
     # Check if file exists
     if os.path.exists(FONT_PATH):
@@ -101,9 +105,6 @@ def compare_hash(url):
         r = requests.get(url, timeout=5)
         if r.status_code == 200:
             current_hash, font_data = hashlib.md5(r.content).hexdigest(), r.content
-            if not current_hash:
-                print("[Font] Failed to get font hash — fallback to cached font.")
-                return
 
             if current_hash != last_font_hash:
                 print(f"Deleting pre-existing font file ...")
@@ -112,7 +113,12 @@ def compare_hash(url):
                 os.makedirs(os.path.dirname(FONT_PATH), exist_ok=True)
                 with open(FONT_PATH, "wb") as f:
                     f.write(font_data)
+                global changed_font
+                print(f"changed_font: {changed_font}, setting to True")
+                changed_font = True
             else:
+                print(f"changed_font: {changed_font}, setting to False")
+                changed_font = False
                 print("[Font] Font unchanged — reusing cached version.")
     except Exception as e:
         print(f"[!] Font hash check failed for {url}: {e}")
@@ -178,27 +184,38 @@ def ensure_latest_font(driver):
         """
         driver.execute_script(script)
 
-
 def get_pseudo_mapping(driver):
     script = """
     let mapping = {};
+
     for (const sheet of document.styleSheets) {
+        // Skip stylesheets we can't access (cross-origin)
+        if (sheet.href && sheet.href.startsWith('http') && !sheet.href.includes(location.host)) continue;
+
         try {
+            if (!sheet.cssRules) continue;
             for (const rule of sheet.cssRules) {
-                if (rule.selectorText && rule.selectorText.endsWith("::before")) {
-                    const sel = rule.selectorText.replace("::before", "").trim();
+                if (!rule.selectorText) continue;
+
+                // Only target rules that include ::before
+                if (rule.selectorText.includes("::before")) {
+                    const selectors = rule.selectorText.split(",");
                     const content = rule.style.getPropertyValue("content");
-                    if (content) {
-                        // Remove quotes around the content
-                        mapping[sel] = content.replace(/^["']|["']$/g, "");
+                    if (!content) continue;
+
+                    const clean = content.replace(/^["']|["']$/g, ""); // strip quotes
+                    // Handle multiple selectors like ".c_evt, .c_ngt::before"
+                    for (let sel of selectors) {
+                        sel = sel.replace("::before", "").trim();
+                        mapping[sel] = clean;
                     }
                 }
             }
         } catch (e) {
-            // Some CSS sheets (cross-origin) cannot be accessed
             continue;
         }
     }
+
     return mapping;
     """
     return driver.execute_script(script)
@@ -211,18 +228,21 @@ def is_content_loaded(driver):
     except:
         return False
 
+
 def decode_VIP(txt):
     if not os.path.exists(FONT_PATH):
         return txt  # fallback to raw text
-        
+
     try:
-        puas = extract_pua_chars(txt)
-        # PUA to Image
-        render_given_pua_glyphs(puas, FONT_PATH, GLYPH_DIR, 64)
-        # #Image to UNICODE MAP
-        print("\n[Generating Map]")
-        generate_map(MAP_PATH)
-        time.sleep(0.5)
+        print(f"[Decoding VIP] Changed font?: {changed_font}")
+        if changed_font:
+            puas = extract_pua_chars(txt)
+            # PUA to Image
+            render_given_pua_glyphs(puas, FONT_PATH, GLYPH_DIR, 64)
+            # #Image to UNICODE MAP
+            print("\n[Generating Map]")
+            generate_map(MAP_PATH)
+            time.sleep(0.5)
         # --- Decode Font ---
         PUA_MAPPING = load_pua_map(MAP_PATH)
         return decode_font(txt, PUA_MAPPING)

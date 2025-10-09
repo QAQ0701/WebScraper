@@ -68,7 +68,7 @@ def loadCookies(driver):
 if __name__ == "__main__":
     # --- Initialize driver ---
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new")  # Optional headless
+    chrome_options.add_argument("--headless=new")  # debug
     if VIP:
         chrome_options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
     driver = webdriver.Chrome(options=chrome_options)
@@ -99,11 +99,10 @@ if __name__ == "__main__":
             # --- Check and update font if changed ---
             if VIP:
                 ensure_latest_font(driver)
-
+            # break # debug
             write_append(f"第{i}章 \n", OUTPUT_PATH)
             i += 1
             # --- Get Book Content ---
-
             # chapNum = driver.find_element(By.TAG_NAME, "h2").text + "\n"
             retries = 0
             text = ""
@@ -153,5 +152,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"[Error] Scraping ended with: {e}")
     # --- Clean Output ---
-    clean_txt(OUTPUT_PATH, CLEANED_PATH, MATCH_STRINGS)
+    clean_txt(OUTPUT_PATH, CLEANED_PATH, MATCH_STRINGS) #debug
     cleanup()
